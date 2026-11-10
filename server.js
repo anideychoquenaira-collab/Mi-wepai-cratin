@@ -1,91 +1,141 @@
 const express = require('express');
-const cors = require('cors');
-const { Readable } = require('node:stream');
-const { pipeline } = require('node:stream/promises');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
-const POLLINATIONS_KEY = process.env.POLLINATIONS_KEY;
-const MODEL = 'veo'; // alias oficial de Veo 3.1 Fast en Pollinations
-const ALLOWED_DURATIONS = new Set([4, 6, 8]);
-const ALLOWED_RESOLUTIONS = new Set(['720p', '1080p']);
-const ALLOWED_ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1']);
 
-app.set('trust proxy', 1);
-app.use(cors({
-  origin: process.env.APP_ORIGIN || '*',
-  methods: ['GET'],
-  maxAge: 600
-}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Límite sencillo para reducir abuso accidental de un endpoint que consume saldo.
-const requestsByIp = new Map();
-const RATE_WINDOW_MS = 60 * 60 * 1000;
-const RATE_LIMIT = 4;
-app.use('/video', (req, res, next) => {
-  const now = Date.now();
-  const ip = req.ip || req.socket.remoteAddress || 'unknown';
-  const recent = (requestsByIp.get(ip) || []).filter((time) => now - time < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) {
-    return res.status(429).send('Límite temporal alcanzado: espera una hora antes de generar más videos.');
-  }
-  recent.push(now);
-  requestsByIp.set(ip, recent);
-  next();
-});
+// Página principal con la app
+app.get('/', (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mi Wepai Cratin - Videos Gratis</title>
+<style>
+  body { font-family: Arial; background: #0f0f1a; color: white; text-align: center; padding: 20px; margin: 0; }
+  h1 { font-size: 28px; }
+  textarea { width: 90%; max-width: 500px; height: 80px; padding: 12px; border-radius: 12px; border: none; font-size: 16px; }
+  button { background: #a855f7; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 12px; margin-top: 15px; cursor: pointer; font-weight: bold; width: 90%; max-width: 500px; }
+  button:disabled { background: #555; }
+  #status { margin-top: 20px; font-size: 16px; color: #facc15; }
+  video { width: 90%; max-width: 500px; margin-top: 20px; border-radius: 12px; display: none; }
+  .ejemplo { background: #1e1e2e; padding: 10px; border-radius: 10px; margin: 10px auto; max-width: 500px; font-size: 14px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <h1>🎬 Mi Wepai Cratin</h1>
+  <p>Genera videos GRATIS con Wan</p>
 
-app.get('/', (_req, res) => {
-  res.type('text/plain').send('Servidor de video activo.');
-});
+  <textarea id="prompt" placeholder="Escribe tu idea... Ej: A cute orange cat dancing happily, colorful room, cartoon style"></textarea>
+  <br>
+  <button id="btn" onclick="generar()">✨ Generar Video Gratis</button>
 
-app.get('/video', async (req, res) => {
-  if (!POLLINATIONS_KEY) {
-    return res.status(500).type('text/plain').send('Falta configurar POLLINATIONS_KEY en las variables de entorno de Render.');
-  }
+  <div id="status"></div>
+  <video id="video" controls></video>
 
-  const prompt = String(req.query.prompt || '').trim();
-  if (!prompt) return res.status(400).type('text/plain').send('Falta el parámetro prompt.');
-  if (prompt.length > 1800) return res.status(413).type('text/plain').send('El prompt supera el máximo de 1800 caracteres.');
+  <p style="margin-top:30px;">Prueba con estos:</p>
+  <div class="ejemplo" onclick="document.getElementById('prompt').value='A cute orange cat dancing happily, colorful room, cartoon style'">🐱 Gato bailando</div>
+  <div class="ejemplo" onclick="document.getElementById('prompt').value='Minecraft creeper dancing, funny, colorful'">⛏️ Creeper de Minecraft bailando</div>
+  <div class="ejemplo" onclick="document.getElementById('prompt').value='A superhero girl with purple hair flying over a city, cinematic'">🦸‍♀️ Superhero Nova volando</div>
 
-  const duration = Number(req.query.duration || 4);
-  const resolution = String(req.query.resolution || '720p');
-  const aspectRatio = String(req.query.aspectRatio || '16:9');
-  if (!ALLOWED_DURATIONS.has(duration)) return res.status(400).type('text/plain').send('Duración admitida: 4, 6 u 8 segundos.');
-  if (!ALLOWED_RESOLUTIONS.has(resolution)) return res.status(400).type('text/plain').send('Resolución admitida: 720p o 1080p.');
-  if (!ALLOWED_ASPECT_RATIOS.has(aspectRatio)) return res.status(400).type('text/plain').send('Formato admitido: 16:9, 9:16 o 1:1.');
+<script>
+async function generar() {
+  const prompt = document.getElementById('prompt').value;
+  const btn = document.getElementById('btn');
+  const status = document.getElementById('status');
+  const video = document.getElementById('video');
 
-  const upstreamQuery = new URLSearchParams({
-    model: MODEL,
-    duration: String(duration),
-    resolution,
-    aspectRatio,
-    key: POLLINATIONS_KEY
-  });
-  const upstreamUrl = `https://gen.pollinations.ai/video/${encodeURIComponent(prompt)}?${upstreamQuery}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10 * 60 * 1000);
+  if(!prompt) { alert('Escribe algo primero'); return; }
+
+  btn.disabled = true;
+  btn.innerText = '⏳ Generando... espera 1 min';
+  status.innerText = 'Generando tu video con Wan (gratis)... no cierres la página';
+  video.style.display = 'none';
 
   try {
-    const upstream = await fetch(upstreamUrl, { signal: controller.signal });
-    if (!upstream.ok) {
-      const detail = (await upstream.text()).slice(0, 1200);
-      return res.status(upstream.status).type('text/plain').send(detail || `Pollinations respondió ${upstream.status}.`);
-    }
-    if (!upstream.body) return res.status(502).type('text/plain').send('Pollinations no devolvió un archivo de video.');
+    const res = await fetch('/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
 
-    res.status(200);
-    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'video/mp4');
-    res.setHeader('Cache-Control', 'no-store');
-    const contentLength = upstream.headers.get('content-length');
-    if (contentLength) res.setHeader('Content-Length', contentLength);
-    await pipeline(Readable.fromWeb(upstream.body), res);
+    if(data.videoUrl) {
+      status.innerText = '✅ ¡Listo! Aquí está tu video';
+      video.src = data.videoUrl;
+      video.style.display = 'block';
+      video.play();
+    } else {
+      status.innerText = '❌ Error: ' + (data.error || 'Intenta de nuevo');
+    }
+  } catch(e) {
+    status.innerText = '❌ Error de conexión, intenta de nuevo';
+  }
+
+  btn.disabled = false;
+  btn.innerText = '✨ Generar Video Gratis';
+}
+</script>
+</body>
+</html>
+  `);
+});
+
+// Generar video con Wan - USA POLLEN GRATIS (QUEST)
+app.post('/generate', async (req, res) => {
+  const { prompt } = req.body;
+  const apiKey = process.env.POLLINATIONS_API_KEY;
+
+  if (!apiKey) {
+    return res.json({ error: 'Falta POLLINATIONS_API_KEY en Render' });
+  }
+
+  try {
+    console.log('Generando con Wan:', prompt);
+
+    const response = await fetch('https://gen.pollinations.ai/image/generate', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: "alibaba/wan-2.2-fast",
+        prompt: prompt,
+        nologo: true,
+        safe: false
+      })
+    });
+
+    const data = await response.json();
+    console.log('Respuesta Pollinations:', JSON.stringify(data).substring(0, 500));
+
+    if (data.url) {
+      return res.json({ videoUrl: data.url });
+    }
+    if (data.videoUrl) {
+      return res.json({ videoUrl: data.videoUrl });
+    }
+    if (typeof data === 'string' && data.startsWith('http')) {
+      return res.json({ videoUrl: data });
+    }
+
+    // Si la API devuelve video directo
+    if (data.error) {
+      return res.json({ error: data.error });
+    }
+
+    return res.json({ error: 'No se pudo generar, intenta con otro prompt' });
+
   } catch (error) {
-    if (res.headersSent) return res.destroy(error);
-    const message = error.name === 'AbortError' ? 'Pollinations tardó más de 10 minutos y se canceló.' : 'No se pudo conectar con Pollinations.';
-    res.status(502).type('text/plain').send(message);
-  } finally {
-    clearTimeout(timeout);
+    console.error(error);
+    return res.json({ error: 'Error del servidor: ' + error.message });
   }
 });
 
-app.listen(PORT, () => console.log(`Servidor listo en el puerto ${PORT}`));
+app.listen(PORT, () => {
+  console.log('Servidor corriendo en puerto ' + PORT);
+});
