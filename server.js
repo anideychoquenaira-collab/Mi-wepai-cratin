@@ -5,7 +5,6 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Página principal con la app
 app.get('/', (req, res) => {
   res.send(`
 <!DOCTYPE html>
@@ -13,7 +12,7 @@ app.get('/', (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mi Wepai Cratin - Videos Gratis</title>
+<title>Mi Wepai Cratin</title>
 <style>
   body { font-family: Arial; background: #0f0f1a; color: white; text-align: center; padding: 20px; margin: 0; }
   h1 { font-size: 28px; }
@@ -28,33 +27,26 @@ app.get('/', (req, res) => {
 <body>
   <h1>🎬 Mi Wepai Cratin</h1>
   <p>Genera videos GRATIS con Wan</p>
-
   <textarea id="prompt" placeholder="Escribe tu idea... Ej: A cute orange cat dancing happily, colorful room, cartoon style"></textarea>
   <br>
   <button id="btn" onclick="generar()">✨ Generar Video Gratis</button>
-
   <div id="status"></div>
-  <video id="video" controls></video>
-
+  <video id="video" controls playsinline></video>
   <p style="margin-top:30px;">Prueba con estos:</p>
   <div class="ejemplo" onclick="document.getElementById('prompt').value='A cute orange cat dancing happily, colorful room, cartoon style'">🐱 Gato bailando</div>
   <div class="ejemplo" onclick="document.getElementById('prompt').value='Minecraft creeper dancing, funny, colorful'">⛏️ Creeper de Minecraft bailando</div>
   <div class="ejemplo" onclick="document.getElementById('prompt').value='A superhero girl with purple hair flying over a city, cinematic'">🦸‍♀️ Superhero Nova volando</div>
-
 <script>
 async function generar() {
   const prompt = document.getElementById('prompt').value;
   const btn = document.getElementById('btn');
   const status = document.getElementById('status');
   const video = document.getElementById('video');
-
   if(!prompt) { alert('Escribe algo primero'); return; }
-
   btn.disabled = true;
   btn.innerText = '⏳ Generando... espera 1 min';
-  status.innerText = 'Generando tu video con Wan (gratis)... no cierres la página';
+  status.innerText = 'Generando tu video con Wan (gratis)... no cierres la pagina';
   video.style.display = 'none';
-
   try {
     const res = await fetch('/generate', {
       method: 'POST',
@@ -62,9 +54,8 @@ async function generar() {
       body: JSON.stringify({ prompt })
     });
     const data = await res.json();
-
     if(data.videoUrl) {
-      status.innerText = '✅ ¡Listo! Aquí está tu video';
+      status.innerText = '✅ ¡Listo! Aqui esta tu video';
       video.src = data.videoUrl;
       video.style.display = 'block';
       video.play();
@@ -72,9 +63,8 @@ async function generar() {
       status.innerText = '❌ Error: ' + (data.error || 'Intenta de nuevo');
     }
   } catch(e) {
-    status.innerText = '❌ Error de conexión, intenta de nuevo';
+    status.innerText = '❌ Error de conexion, intenta de nuevo';
   }
-
   btn.disabled = false;
   btn.innerText = '✨ Generar Video Gratis';
 }
@@ -84,56 +74,25 @@ async function generar() {
   `);
 });
 
-// Generar video con Wan - USA POLLEN GRATIS (QUEST)
+// ESTA ES LA PARTE QUE GENERA EN TU APP - CORREGIDA
 app.post('/generate', async (req, res) => {
   const { prompt } = req.body;
   const apiKey = process.env.POLLINATIONS_API_KEY;
 
   if (!apiKey) {
-    return res.json({ error: 'Falta POLLINATIONS_API_KEY en Render' });
+    return res.json({ error: 'Falta POLLINATIONS_API_KEY en Render > Environment' });
+  }
+  if (!prompt) {
+    return res.json({ error: 'Escribe un prompt' });
   }
 
-  try {
-    console.log('Generando con Wan:', prompt);
+  // Wan usa el endpoint de imagen/video con GET, no POST
+  // Construimos la URL directa con tu key
+  const encoded = encodeURIComponent(prompt);
+  const videoUrl = 'https://gen.pollinations.ai/image/' + encoded + '?model=wan&width=512&height=512&duration=5&key=' + apiKey;
 
-    const response = await fetch('https://gen.pollinations.ai/image/generate', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: "alibaba/wan-2.2-fast",
-        prompt: prompt,
-        nologo: true,
-        safe: false
-      })
-    });
-
-    const data = await response.json();
-    console.log('Respuesta Pollinations:', JSON.stringify(data).substring(0, 500));
-
-    if (data.url) {
-      return res.json({ videoUrl: data.url });
-    }
-    if (data.videoUrl) {
-      return res.json({ videoUrl: data.videoUrl });
-    }
-    if (typeof data === 'string' && data.startsWith('http')) {
-      return res.json({ videoUrl: data });
-    }
-
-    // Si la API devuelve video directo
-    if (data.error) {
-      return res.json({ error: data.error });
-    }
-
-    return res.json({ error: 'No se pudo generar, intenta con otro prompt' });
-
-  } catch (error) {
-    console.error(error);
-    return res.json({ error: 'Error del servidor: ' + error.message });
-  }
+  console.log('Generando con Wan:', prompt);
+  return res.json({ videoUrl: videoUrl });
 });
 
 app.listen(PORT, () => {
