@@ -6,9 +6,10 @@ const { pipeline } = require('node:stream/promises');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const POLLINATIONS_KEY = process.env.POLLINATIONS_KEY;
-const MODEL = 'wan'; // alias oficial de veo 3.1 Fast en Pollinations
-const ALLOWED_DURATIONS = new Set([4, 6, 8]);
-const ALLOWED_RESOLUTIONS = new Set(['720p', '1080p']);
+
+// CORREGIDO: nombre completo real de Wan, no el alias 'wan'
+const MODEL = 'alibaba/wan-2.2-fast';
+const ALLOWED_DURATIONS = new Set([5]);
 const ALLOWED_ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1']);
 
 app.set('trust proxy', 1);
@@ -18,7 +19,6 @@ app.use(cors({
   maxAge: 600
 }));
 
-// Límite sencillo para reducir abuso accidental de un endpoint que consume saldo.
 const requestsByIp = new Map();
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT = 4;
@@ -40,24 +40,21 @@ app.get('/', (_req, res) => {
 
 app.get('/video', async (req, res) => {
   if (!POLLINATIONS_KEY) {
-    return res.status(500).type('text/plain').send('Falta configurar POLLINATIONS_KEY en las variables de entorno de Render.');
+    return res.status(500).type('text/plain').send('Falta configurar POLLINATIONS_KEY en Render.');
   }
 
   const prompt = String(req.query.prompt || '').trim();
   if (!prompt) return res.status(400).type('text/plain').send('Falta el parámetro prompt.');
   if (prompt.length > 1800) return res.status(413).type('text/plain').send('El prompt supera el máximo de 1800 caracteres.');
 
-  const duration = Number(req.query.duration || 4);
-  const resolution = String(req.query.resolution || '720p');
+  const duration = Number(req.query.duration || 5);
   const aspectRatio = String(req.query.aspectRatio || '16:9');
-  if (!ALLOWED_DURATIONS.has(duration)) return res.status(400).type('text/plain').send('Duración admitida: 4, 6 u 8 segundos.');
-  if (!ALLOWED_RESOLUTIONS.has(resolution)) return res.status(400).type('text/plain').send('Resolución admitida: 720p o 1080p.');
+  if (!ALLOWED_DURATIONS.has(duration)) return res.status(400).type('text/plain').send('Wan solo admite 5 segundos.');
   if (!ALLOWED_ASPECT_RATIOS.has(aspectRatio)) return res.status(400).type('text/plain').send('Formato admitido: 16:9, 9:16 o 1:1.');
 
   const upstreamQuery = new URLSearchParams({
     model: MODEL,
     duration: String(duration),
-    resolution,
     aspectRatio,
     key: POLLINATIONS_KEY
   });
