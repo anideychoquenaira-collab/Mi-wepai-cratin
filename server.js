@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 const POLLINATIONS_KEY = process.env.POLLINATIONS_KEY;
 const MODEL = 'alibaba/wan-2.2-fast';
 const ALLOWED_DURATIONS = new Set([5]);
-const ALLOWED_RESOLUTIONS = new Set(['720p', '1080p']);
+const ALLOWED_RESOLUTIONS = new Set(['480p']);
 const ALLOWED_ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1']);
 const MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const referenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_REFERENCE_IMAGE_BYTES, files: 1 } });
@@ -52,10 +52,10 @@ async function generateVideo(req, res) {
   if (prompt.length > 1800) return res.status(413).type('text/plain').send('El prompt supera el máximo de 1800 caracteres.');
 
   const duration = Number(fields.duration || req.query.duration || 5);
-  const resolution = String(fields.resolution || req.query.resolution || '720p');
+  const resolution = String(fields.resolution || req.query.resolution || '480p');
   const aspectRatio = String(fields.aspectRatio || req.query.aspectRatio || '16:9');
-  if (!ALLOWED_DURATIONS.has(duration)) return res.status(400).type('text/plain').send('Duración admitida: solo 5 segundos para Wan.');
-  if (!ALLOWED_RESOLUTIONS.has(resolution)) return res.status(400).type('text/plain').send('Resolución admitida: 720p o 1080p.');
+  if (!ALLOWED_DURATIONS.has(duration)) return res.status(400).type('text/plain').send('Este modelo admite clips de 5 segundos.');
+  if (!ALLOWED_RESOLUTIONS.has(resolution)) return res.status(400).type('text/plain').send('Este modelo admite resolución 480p.');
   if (!ALLOWED_ASPECT_RATIOS.has(aspectRatio)) return res.status(400).type('text/plain').send('Formato admitido: 16:9, 9:16 o 1:1.');
 
   const controller = new AbortController();
