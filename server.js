@@ -54,7 +54,7 @@ async function generateVideo(req, res) {
   const duration = Number(fields.duration || req.query.duration || 5);
   const resolution = String(fields.resolution || req.query.resolution || '720p');
   const aspectRatio = String(fields.aspectRatio || req.query.aspectRatio || '16:9');
-  if (!ALLOWED_DURATIONS.has(duration)) return res.status(400).type('text/plain').send('Duración admitida: 5, 6 o 7 segundos.');
+  if (!ALLOWED_DURATIONS.has(duration)) return res.status(400).type('text/plain').send('Duración admitida: solo 5 segundos para Wan.');
   if (!ALLOWED_RESOLUTIONS.has(resolution)) return res.status(400).type('text/plain').send('Resolución admitida: 720p o 1080p.');
   if (!ALLOWED_ASPECT_RATIOS.has(aspectRatio)) return res.status(400).type('text/plain').send('Formato admitido: 16:9, 9:16 o 1:1.');
 
